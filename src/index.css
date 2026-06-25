@@ -1,0 +1,430 @@
+/* Reset & base */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-page:    #e8e4d8;
+  --bg-map:     #F5F2E8;
+  --bg-chrome:  #1c3a5e;   /* TfL corporate navy */
+  --accent:     #003688;   /* Piccadilly blue */
+  --font:       'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
+  --radius:     6px;
+}
+
+html, body { height: 100%; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg-page);
+  color: #1a1a1a;
+  -webkit-font-smoothing: antialiased;
+  display: block;   /* override vite scaffold centering */
+  min-height: 100vh;
+}
+
+/* ── Layout ── */
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ── Header ── */
+.app-header {
+  background: var(--bg-chrome);
+  color: white;
+  padding: 10px 20px;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.app-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.app-subtitle {
+  font-size: 0.8rem;
+  opacity: 0.65;
+}
+
+/* ── Toolbar ── */
+.toolbar {
+  background: #f0ece0;
+  border-bottom: 2px solid #c8c3b0;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.toolbar-group {
+  display: flex;
+  gap: 6px;
+}
+
+.toolbar-history {
+  margin-left: auto;
+}
+
+.toolbar-help {
+  width: 100%;
+  font-size: 0.7rem;
+  color: #666;
+  display: flex;
+  gap: 24px;
+}
+
+.tool-btn {
+  padding: 5px 14px;
+  border: 1.5px solid #bbb;
+  border-radius: var(--radius);
+  background: white;
+  font-size: 0.82rem;
+  font-family: var(--font);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  color: #333;
+}
+
+.tool-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tool-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.tool-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.icon-btn {
+  padding: 5px 10px;
+  font-size: 1rem;
+}
+
+/* ── Canvas ── */
+.app-body {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.canvas-container {
+  width: 100%;
+  height: 580px;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-map);
+}
+
+/* Mode hint banners */
+.mode-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.72);
+  color: white;
+  font-size: 0.78rem;
+  padding: 6px 16px;
+  border-radius: 20px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.mode-hint--error {
+  background: rgba(180, 30, 30, 0.88);
+  white-space: normal;
+  max-width: 420px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* ── Legend ── */
+.legend {
+  background: white;
+  border-top: 2px solid #c8c3b0;
+  padding: 12px 16px;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.08);
+  flex-shrink: 0;
+}
+
+.legend-inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.legend-empty {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+/* Each line entry in the legend */
+.legend-item {
+  cursor: pointer;
+  border-radius: 20px;
+  transition: box-shadow 0.15s;
+}
+
+.legend-item--selected {
+  box-shadow: 0 0 0 3px #FFD300, 0 0 0 5px #333;
+}
+
+.legend-item:hover:not(.legend-item--selected) {
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.25);
+}
+
+/* The coloured horizontal pill (mimics TfL Tube line key) */
+.legend-pill {
+  display: inline-block;
+  padding: 5px 18px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* ── Modals ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  border-radius: 10px;
+  padding: 24px 28px;
+  width: 360px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+}
+
+.modal-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 14px;
+  color: #1c3a5e;
+}
+
+.modal-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1.5px solid #ccc;
+  border-radius: var(--radius);
+  font-size: 0.95rem;
+  font-family: var(--font);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.modal-input:focus {
+  border-color: var(--accent);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.modal-btn {
+  padding: 7px 18px;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  font-family: var(--font);
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+
+.modal-btn.primary {
+  background: var(--accent);
+  color: white;
+}
+
+.modal-btn.primary:hover {
+  background: #002260;
+}
+
+.modal-btn.secondary {
+  background: #eee;
+  color: #333;
+}
+
+.modal-btn.secondary:hover {
+  background: #ddd;
+}
+
+/* ── Line picker (floating panel after two stations are clicked in connect mode) ── */
+.line-picker {
+  position: absolute;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+  padding: 10px;
+  z-index: 900;
+  min-width: 160px;
+  transform: translate(-50%, 12px); /* centre below the click point */
+}
+
+.line-picker-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #666;
+  margin-bottom: 7px;
+}
+
+.line-picker-btn {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  margin-bottom: 5px;
+  border: none;
+  border-radius: 14px;
+  font-size: 0.8rem;
+  font-family: var(--font);
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: opacity 0.1s;
+}
+
+.line-picker-btn:hover {
+  opacity: 0.85;
+}
+
+.line-picker-cancel {
+  display: block;
+  width: 100%;
+  padding: 5px 12px;
+  border: 1px solid #ddd;
+  border-radius: 14px;
+  background: none;
+  font-size: 0.78rem;
+  font-family: var(--font);
+  color: #666;
+  cursor: pointer;
+  text-align: center;
+  margin-top: 2px;
+}
+
+.line-picker-cancel:hover {
+  background: #f5f5f5;
+}
+
+/* ── Colour picker (inside LineNameModal) ── */
+.color-picker {
+  margin-top: 14px;
+}
+
+.color-picker-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2.5px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s, border-color 0.1s;
+  outline: none;
+}
+
+.swatch:hover {
+  transform: scale(1.18);
+}
+
+.swatch--selected {
+  border-color: #fff;
+  box-shadow: 0 0 0 2.5px #1c3a5e;
+  transform: scale(1.15);
+}
+
+.color-preview {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.color-preview::before {
+  content: 'Preview:';
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Context menu ── */
+.context-menu {
+  position: absolute;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  z-index: 999;
+  overflow: hidden;
+  min-width: 110px;
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  text-align: left;
+  background: none;
+  border: none;
+  font-size: 0.82rem;
+  font-family: var(--font);
+  cursor: pointer;
+  color: #222;
+  border-radius: 0;
+}
+
+.context-menu button:hover {
+  background: #f0f0f0;
+}
+
+.context-menu button.danger {
+  color: #c0392b;
+}
+
+.context-menu button.danger:hover {
+  background: #fdecea;
+}
