@@ -8,35 +8,40 @@ import LineNameModal from './components/LineNameModal'
 import './App.css'
 import { TUBE_COLORS } from './constants'
 
-// Seed three lines and eight stations so the user sees a real map on first load
+// Convert an ordered list of station ids into explicit edges so the seed map
+// matches the edge-based data model used everywhere else.
+function idsToEdges(ids) {
+  const edges = []
+  for (let i = 0; i < ids.length - 1; i++) edges.push([ids[i], ids[i + 1]])
+  return edges
+}
+
 function createSeedData() {
-  const s1 = { id: uuid(), name: 'Paddington',      x: 140, y: 200 }
-  const s2 = { id: uuid(), name: 'Oxford Circus',   x: 340, y: 200 }
-  const s3 = { id: uuid(), name: 'Liverpool St',    x: 580, y: 200 }
-  const s4 = { id: uuid(), name: 'Waterloo',        x: 340, y: 380 }
-  const s5 = { id: uuid(), name: 'Brixton',         x: 340, y: 520 }
-  const s6 = { id: uuid(), name: "King's Cross",    x: 480, y: 120 }
-  const s7 = { id: uuid(), name: 'Heathrow',        x: 80,  y: 120 }
-  const s8 = { id: uuid(), name: 'Hammersmith',     x: 80,  y: 380 }
+  const s1 = { id: uuid(), name: 'Paddington',    x: 140, y: 200 }
+  const s2 = { id: uuid(), name: 'Oxford Circus', x: 340, y: 200 }
+  const s3 = { id: uuid(), name: 'Liverpool St',  x: 580, y: 200 }
+  const s4 = { id: uuid(), name: 'Waterloo',      x: 340, y: 380 }
+  const s5 = { id: uuid(), name: 'Brixton',       x: 340, y: 520 }
+  const s6 = { id: uuid(), name: "King's Cross",  x: 480, y: 120 }
+  const s7 = { id: uuid(), name: 'Heathrow',      x: 80,  y: 120 }
+  const s8 = { id: uuid(), name: 'Hammersmith',   x: 80,  y: 380 }
 
   return {
     stations: [s1, s2, s3, s4, s5, s6, s7, s8],
     lines: [
-      { id: uuid(), name: 'Bakerloo',  color: '#B36305', stationIds: [s7.id, s1.id, s2.id, s4.id, s5.id] },
-      { id: uuid(), name: 'Victoria',  color: '#0098D4', stationIds: [s6.id, s2.id, s4.id, s5.id] },
-      { id: uuid(), name: 'Piccadilly',color: '#003688', stationIds: [s7.id, s1.id, s6.id, s3.id] },
+      { id: uuid(), name: 'Bakerloo',  color: '#B36305', edges: idsToEdges([s7.id, s1.id, s2.id, s4.id, s5.id]) },
+      { id: uuid(), name: 'Victoria',  color: '#0098D4', edges: idsToEdges([s6.id, s2.id, s4.id, s5.id]) },
+      { id: uuid(), name: 'Piccadilly',color: '#003688', edges: idsToEdges([s7.id, s1.id, s6.id, s3.id]) },
     ],
   }
 }
 
 const MAX_HISTORY = 20
 
-// Snapshot of undo-able fields only
 function snapshot({ lines, stations, selectedLineId }) {
   return { lines, stations, selectedLineId }
 }
 
-// Append current state to history and clear future
 function pushHistory(state) {
   return {
     ...state,
@@ -59,7 +64,6 @@ function reducer(state, action) {
       return pushHistory({ ...state, stations: [...state.stations, station] })
     }
 
-    // Dragging — no history entry (too many intermediate frames)
     case 'MOVE_STATION': {
       const stations = state.stations.map(s =>
         s.id === action.id ? { ...s, x: action.x, y: action.y } : s
@@ -67,7 +71,6 @@ function reducer(state, action) {
       return { ...state, stations }
     }
 
-    // Drag end — push one history entry
     case 'MOVE_STATION_COMMIT': {
       const stations = state.stations.map(s =>
         s.id === action.id ? { ...s, x: action.x, y: action.y } : s
@@ -86,15 +89,19 @@ function reducer(state, action) {
       return pushHistory({
         ...state,
         stations: state.stations.filter(s => s.id !== action.id),
-        lines:    state.lines.map(l => ({ ...l, stationIds: l.stationIds.filter(id => id !== action.id) })),
+        // Remove every edge that touches the deleted station
+        lines: state.lines.map(l => ({
+          ...l,
+          edges: l.edges.filter(([a, b]) => a !== action.id && b !== action.id),
+        })),
       })
     }
 
     case 'ADD_LINE': {
       const usedColors = state.lines.map(l => l.color)
-      const fallback = TUBE_COLORS.find(c => !usedColors.includes(c.hex))?.hex ?? TUBE_COLORS[0].hex
-      const color = action.color || fallback
-      const line  = { id: uuid(), name: action.name || 'New Line', color, stationIds: [] }
+      const fallback   = TUBE_COLORS.find(c => !usedColors.includes(c.hex))?.hex ?? TUBE_COLORS[0].hex
+      const color      = action.color || fallback
+      const line       = { id: uuid(), name: action.name || 'New Line', color, edges: [] }
       return pushHistory({ ...state, lines: [...state.lines, line], selectedLineId: line.id })
     }
 
@@ -106,7 +113,7 @@ function reducer(state, action) {
     case 'DELETE_LINE': {
       return pushHistory({
         ...state,
-        lines:         state.lines.filter(l => l.id !== action.id),
+        lines:          state.lines.filter(l => l.id !== action.id),
         selectedLineId: state.selectedLineId === action.id ? null : state.selectedLineId,
       })
     }
@@ -114,27 +121,20 @@ function reducer(state, action) {
     case 'SET_CONNECTING_FROM':
       return { ...state, connectingFromId: action.stationId }
 
+    // Edge-based connect: add exactly one segment [fromId, toId] to the line.
+    // No other stations are implied — this is the only segment created.
     case 'CONNECT_STATIONS': {
       const { lineId, fromId, toId } = action
       if (fromId === toId) return { ...state, connectingFromId: null }
 
       const lines = state.lines.map(l => {
         if (l.id !== lineId) return l
-        const ids     = [...l.stationIds]
-        const fromIdx = ids.indexOf(fromId)
-        const toIdx   = ids.indexOf(toId)
-
-        if (fromIdx === -1 && toIdx === -1)
-          return { ...l, stationIds: [...ids, fromId, toId] }
-        if (fromIdx !== -1 && toIdx === -1) {
-          ids.splice(fromIdx + 1, 0, toId)
-          return { ...l, stationIds: ids }
-        }
-        if (fromIdx === -1 && toIdx !== -1) {
-          ids.splice(toIdx, 0, fromId)
-          return { ...l, stationIds: ids }
-        }
-        return l
+        // Prevent duplicate edges (either direction)
+        const exists = l.edges.some(([a, b]) =>
+          (a === fromId && b === toId) || (a === toId && b === fromId)
+        )
+        if (exists) return l
+        return { ...l, edges: [...l.edges, [fromId, toId]] }
       })
       return pushHistory({ ...state, lines, connectingFromId: null })
     }
@@ -168,26 +168,23 @@ function reducer(state, action) {
 const seed = createSeedData()
 const initialState = {
   ...seed,
-  mode: 'select',
-  selectedLineId:    null,
-  connectingFromId:  null,
-  stationModal:      null,
-  lineModal:         null,
-  past:              [],
-  future:            [],
+  mode:             'select',
+  selectedLineId:   null,
+  connectingFromId: null,
+  stationModal:     null,
+  lineModal:        null,
+  past:             [],
+  future:           [],
 }
 
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState)
-  // Holds canvas coords while the name-modal is open for a brand-new station
   const pendingCoords = useRef(null)
 
-  // Keyboard shortcuts
   useEffect(() => {
     function onKey(e) {
       const tag = document.activeElement?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
-
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault(); dispatch({ type: 'UNDO' })
       }
@@ -202,7 +199,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Canvas click while in addStation mode — save coords, open modal
   const handleCanvasAddStation = useCallback((x, y) => {
     pendingCoords.current = { x, y }
     dispatch({ type: 'SHOW_STATION_MODAL', stationId: '__new__' })
