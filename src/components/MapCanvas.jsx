@@ -11,37 +11,49 @@ const BG            = '#F5F2E8'
 
 const snap = v => Math.round(v / GRID) * GRID
 
-function linePoints(stationIds, stationMap) {
-  return stationIds.flatMap(id => {
-    const s = stationMap.get(id)
-    return s ? [s.x, s.y] : []
-  })
+// Each line is now a list of explicit edges: { edges: [[idA, idB], ...] }
+// This function converts one edge to the 4-number array Konva Line expects.
+function edgeToPoints([aId, bId], stationMap) {
+  const a = stationMap.get(aId)
+  const b = stationMap.get(bId)
+  return a && b ? [a.x, a.y, b.x, b.y] : null
 }
 
+// A station is an interchange if it appears in edges of 2+ distinct lines.
 function buildInterchangeSet(lines) {
-  const counts = {}
-  for (const line of lines)
-    for (const id of line.stationIds)
-      counts[id] = (counts[id] || 0) + 1
-  const set = new Set()
-  for (const [id, c] of Object.entries(counts))
-    if (c >= 2) set.add(id)
-  return set
-}
-
-function buildTerminalSet(lines) {
-  const set = new Set()
+  const lineSet = {} // stationId → Set of lineIds
   for (const line of lines) {
-    if (line.stationIds.length > 0) {
-      set.add(line.stationIds[0])
-      set.add(line.stationIds[line.stationIds.length - 1])
+    for (const [a, b] of line.edges) {
+      if (!lineSet[a]) lineSet[a] = new Set()
+      if (!lineSet[b]) lineSet[b] = new Set()
+      lineSet[a].add(line.id)
+      lineSet[b].add(line.id)
     }
   }
+  const set = new Set()
+  for (const [id, ls] of Object.entries(lineSet))
+    if (ls.size >= 2) set.add(id)
   return set
 }
 
+// A station is a terminal if it has degree 1 — connected to exactly one
+// other station across all lines (i.e. a dead-end endpoint).
+function buildTerminalSet(lines) {
+  const degree = {}
+  for (const line of lines)
+    for (const [a, b] of line.edges) {
+      degree[a] = (degree[a] || 0) + 1
+      degree[b] = (degree[b] || 0) + 1
+    }
+  const set = new Set()
+  for (const [id, deg] of Object.entries(degree))
+    if (deg === 1) set.add(id)
+  return set
+}
+
+// Pick the display colour for a station dot (first line whose edges include it)
 function primaryColor(stationId, lines) {
-  return lines.find(l => l.stationIds.includes(stationId))?.color ?? '#333'
+  return lines.find(l => l.edges.some(([a, b]) => a === stationId || b === stationId))?.color ?? '#333'
 }
 
 function pillTextColor(hex) {
@@ -66,12 +78,17 @@ export default function MapCanvas({
   const interchangeSet = useMemo(() => buildInterchangeSet(lines), [lines])
   const terminalSet    = useMemo(() => buildTerminalSet(lines), [lines])
 
-  // Core auto-redraw: derive every line's pixel points from station coordinates.
-  // React re-renders whenever stations/lines change → useMemo recomputes → Konva redraws.
-  const linePointsMap = useMemo(() => {
+  // Core auto-redraw: for every line, map each edge to its pixel coordinates.
+  // When a station moves, React re-renders → useMemo recomputes → Konva redraws.
+  // Result: Map<lineId, Array<[x0,y0,x1,y1]>>
+  const lineEdgesMap = useMemo(() => {
     const map = new Map()
-    for (const line of lines)
-      map.set(line.id, linePoints(line.stationIds, stationMap))
+    for (const line of lines) {
+      map.set(line.id, line.edges
+        .map(edge => edgeToPoints(edge, stationMap))
+        .filter(Boolean)
+      )
+    }
     return map
   }, [lines, stationMap])
 
@@ -146,8 +163,7 @@ export default function MapCanvas({
     } else if (lines.length === 0) {
       dispatch({ type: 'SET_CONNECTING_FROM', stationId: null })
     } else {
-      const stage = e.target.getStage()
-      const pos   = stage.getPointerPosition()
+      const pos = e.target.getStage().getPointerPosition()
       setLinePicker({ fromId, toId, x: pos.x, y: pos.y })
     }
   }, [mode, connectingFromId, selectedLineId, lines, dispatch])
@@ -190,22 +206,23 @@ export default function MapCanvas({
         <Layer>
           <Rect name="bg" x={0} y={0} width={stageSize.width} height={stageSize.height} fill={BG} />
 
-          {/* Route lines */}
-          {lines.map(line => {
-            const pts = linePointsMap.get(line.id) || []
-            if (pts.length < 4) return null
-            return (
+          {/* Route segments — one <Line> per edge, so connecting A↔B never
+              implicitly draws a segment to any third station. */}
+          {lines.flatMap(line => {
+            const edgePts = lineEdgesMap.get(line.id) || []
+            const dim = selectedLineId && selectedLineId !== line.id
+            return edgePts.map((pts, i) => (
               <Line
-                key={line.id}
+                key={`${line.id}-${i}`}
                 points={pts}
                 stroke={line.color}
                 strokeWidth={LINE_W}
                 lineCap="round"
                 lineJoin="round"
                 tension={0}
-                opacity={selectedLineId && selectedLineId !== line.id ? 0.35 : 1}
+                opacity={dim ? 0.35 : 1}
               />
-            )
+            ))
           })}
 
           {/* Stations */}
@@ -304,7 +321,6 @@ export default function MapCanvas({
         </div>
       )}
 
-      {/* Mode hints */}
       {mode === 'addStation' && (
         <div className="mode-hint">Click anywhere on the map to place a new station</div>
       )}
