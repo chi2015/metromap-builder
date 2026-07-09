@@ -23,7 +23,7 @@ All application state lives in a single `useReducer` in [src/App.jsx](src/App.js
 
 ```js
 {
-  lines:           [{ id, name, color, stationIds: [id, ...] }],
+  lines:           [{ id, name, color, edges: [[idA, idB], ...] }],
   stations:        [{ id, name, x, y }],
   mode:            'select' | 'addStation' | 'connect',
   selectedLineId:  string | null,
@@ -35,19 +35,19 @@ All application state lives in a single `useReducer` in [src/App.jsx](src/App.js
 }
 ```
 
-Undo/redo snapshots only include `{ lines, stations, selectedLineId }`. Drag frames use `MOVE_STATION` (no history push); drag-end uses `MOVE_STATION_COMMIT` (pushes one entry).
+Lines use an **edge-based model**: each line stores an array of `[stationIdA, stationIdB]` pairs. Each pair is one drawn segment. This means `CONNECT_STATIONS` adds exactly one edge — no implicit connections to neighbouring stations are possible. Undo/redo snapshots only include `{ lines, stations, selectedLineId }`. Drag frames use `MOVE_STATION` (no history push); drag-end uses `MOVE_STATION_COMMIT` (pushes one entry).
 
 ### Auto-redraw mechanism
 
-`MapCanvas` computes a `linePointsMap` via `useMemo` that maps each line's id to a flat `[x0,y0,x1,y1,...]` array derived from `stations`. When any station moves, React re-renders → `useMemo` recomputes affected point arrays → Konva redraws. No imperative canvas calls anywhere.
+`MapCanvas` computes a `lineEdgesMap` via `useMemo` that maps each line's id to an array of `[x0,y0,x1,y1]` arrays (one per edge), derived from `stations`. When any station moves, React re-renders → `useMemo` recomputes affected edge coordinates → Konva redraws. No imperative canvas calls anywhere.
 
 ### Canvas rendering
 
-`MapCanvas` uses `react-konva` with a single `Stage > Layer`. Konva `Group` components are positioned at `station.x / station.y` (not at 0,0), so all child `Circle` and `Text` elements use relative coordinates. Stations snap to a 20 px grid (`snap` helper). The `Rect name="bg"` covers the whole stage and is the only element that fires `handleStageClick` for addStation mode.
+`MapCanvas` uses `react-konva` with a single `Stage > Layer`. Each edge is a separate Konva `<Line>` with exactly 4 points. Konva `Group` components are positioned at `station.x / station.y` (not at 0,0), so all child `Circle` and `Text` elements use relative coordinates. Stations snap to a 20 px grid (`snap` helper). The `Rect name="bg"` covers the whole stage and is the only element that fires `handleStageClick` for addStation mode.
 
 Station visual types (mutually exclusive, checked in this order):
-1. **Interchange** — appears on ≥ 2 lines (`interchangeSet`): large white circle, black border
-2. **Terminal** — first or last of any line AND not interchange (`terminalSet`): larger solid dot
+1. **Interchange** — appears in edges of ≥ 2 distinct lines (`interchangeSet`): large white circle, black border
+2. **Terminal** — total edge degree of 1 AND not interchange (`terminalSet`): larger solid dot
 3. **Regular** — everything else: small solid dot in the line's colour
 
 ### Connect mode flow
@@ -57,9 +57,7 @@ Station visual types (mutually exclusive, checked in this order):
    - If `selectedLineId` set → `CONNECT_STATIONS` immediately
    - If only one line exists → auto-picks it
    - If multiple lines and none selected → `linePicker` local state shows a floating HTML panel
-3. `CONNECT_STATIONS` inserts the new station into `stationIds` adjacent to whichever of the two is already on the line (via `splice`). If neither is on the line, both are appended. Clicking the same station twice resets `connectingFromId`.
-
-**Known limitation:** inserting adjacent to a mid-route station creates an unintended segment to the station's existing neighbour. This is a consequence of the linear-array route model. A proper fix requires switching to an edge-based model `{ edges: [[idA, idB], ...] }`.
+3. `CONNECT_STATIONS` pushes exactly one edge `[fromId, toId]` onto the line's `edges` array. Duplicate edges (either direction) are silently skipped. Clicking the same station twice resets `connectingFromId`.
 
 ### Modal sentinel value
 
